@@ -50,6 +50,5 @@ class TestChatServer(unittest.TestCase):
         cls.server_thread.join(timeout=5)  # Asegúrate de que el hilo se una
         print("Servidor detenido.")
 
-
 if __name__ == "__main__":
     unittest.main()

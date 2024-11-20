@@ -37,12 +37,11 @@ class ChatServer:
                     print(f"Cerrando conexión con {data.addr}")
                     self.sel.unregister(sock)
                     sock.close()
-            except (ConnectionResetError, ValueError):  # Maneja errores comunes
+            except (ConnectionResetError, ValueError): 
                 print(f"Error con conexión {data.addr}. Cerrando socket.")
                 self.sel.unregister(sock)
                 sock.close()
         elif mask & selectors.EVENT_WRITE:
-            # Si hay datos para enviar, puedes agregar lógica aquí
             pass
 
     def broadcast(self, message, sender_sock):
@@ -74,10 +73,10 @@ class ChatServer:
 
     def stop(self):
         print("Deteniendo el servidor...")
-        self.running = False  # Detenemos el bucle en `run`
+        self.running = False 
 
         # Cerramos todas las conexiones registradas en el selector
-        if self.sel and not self.sel._map == {}:  # Verifica que el selector no esté vacío ni cerrado
+        if self.sel and not self.sel._map == {}: 
             try:
                 for key in list(self.sel.get_map().values()):
                     sock = key.fileobj
