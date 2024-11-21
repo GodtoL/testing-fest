@@ -1,3 +1,4 @@
+
 # chatserver.py
 import socket
 import selectors
@@ -14,18 +15,20 @@ class ChatServer:
         self.server.setblocking(False)
         self.sel.register(self.server, selectors.EVENT_READ, data=None)
         self.running = True  # Nueva bandera para controlar el bucle
-
+    
     def accept_wrapper(self, sock):
-        conn, addr = sock.accept()
-        print(f"Conectado con {addr}")
-        conn.setblocking(False)
-        data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"")
-        events = selectors.EVENT_READ | selectors.EVENT_WRITE
-        self.sel.register(conn, events, data=data)
+        try:
+            conn, addr = sock.accept()  # Acepta la conexión
+            print(f"Conectado con {addr}")
+            conn.setblocking(False)
+            data = types.SimpleNamespace(addr=addr)
+            self.sel.register(conn, selectors.EVENT_READ, data=data)
+        except (OSError, ValueError) as e:
+            print(f"Error al aceptar conexión: {e}")
 
     def service_connection(self, key, mask):
         sock = key.fileobj
-        data = key.data
+        data = key.data  # Información adicional asociada al cliente
 
         if mask & selectors.EVENT_READ:
             try:
@@ -33,16 +36,34 @@ class ChatServer:
                 if recv_data:
                     print(f"Recibido de {data.addr}: {recv_data.decode('ascii')}")
                     self.broadcast(recv_data, sock)
-                else:  # Si no se recibe ningún dato, el cliente cerró la conexión
+                else:
+                    # Si no se recibe ningún dato, el cliente cerró la conexión
                     print(f"Cerrando conexión con {data.addr}")
-                    self.sel.unregister(sock)
-                    sock.close()
-            except (ConnectionResetError, ValueError): 
-                print(f"Error con conexión {data.addr}. Cerrando socket.")
-                self.sel.unregister(sock)
-                sock.close()
+                    self.close_connection(sock)
+
+            except (OSError, ConnectionResetError, BlockingIOError) as e:  # Se añade BlockingIOError
+                print(f"Error con conexión {data.addr}: {e}. Cerrando socket.")
+                self.close_connection(sock)
+
         elif mask & selectors.EVENT_WRITE:
+            # Aquí podrías manejar la escritura si fuese necesario
             pass
+
+    def close_connection(self, sock):
+        # Asegurarse de que el socket esté registrado antes de desregistrarlo
+        try:
+            if sock.fileno() != -1:  # Verifica si el socket está abierto
+                if sock.fileno() in self.sel.get_map():  # Uso de fileno en lugar de sock
+                    print(f"Desregistrando socket {sock.getpeername()}")
+                    self.sel.unregister(sock)
+                sock.close()
+                print(f"Conexión cerrada con {sock.getpeername()}")
+            else:
+                print(f"El socket {sock.getpeername()} ya está cerrado.")
+        except ValueError:
+            print(f"Error: El socket {sock} ya está cerrado o desregistrado.")
+        except OSError:
+            print(f"Error al acceder a {sock} porque ya está cerrado o no es un socket válido.")
 
     def broadcast(self, message, sender_sock):
         for key in list(self.sel.get_map().values()):
@@ -50,22 +71,34 @@ class ChatServer:
             if client_sock is not self.server and client_sock is not sender_sock:
                 try:
                     client_sock.send(message)
-                except (BrokenPipeError, ConnectionResetError, ValueError):
-                    print(f"Error al enviar mensaje. Cerrando conexión.")
-                    self.sel.unregister(client_sock)
-                    client_sock.close()
-
+                except (BrokenPipeError, ConnectionResetError, ValueError, OSError) as e:
+                    print(f"Error al enviar mensaje a {client_sock}: {e}. Cerrando conexión.")
+                    # Cerramos el socket solo si está registrado
+                    try:
+                        if client_sock.fileno() != -1 and client_sock.fileno() in self.sel.get_map():
+                            self.sel.unregister(client_sock)
+                            client_sock.close()
+                    except ValueError:
+                        print(f"Error al desregistrar socket {client_sock}: ya está cerrado o desregistrado.")
+                    except OSError:
+                        print(f"Error al cerrar socket {client_sock}: ya está cerrado o no es un socket válido.")
 
     def run(self):
         print(f"Servidor escuchando en {self.host}:{self.port}")
         try:
             while self.running:  # Bucle controlado por la bandera
-                events = self.sel.select(timeout=1)  # Salimos cada segundo si no hay eventos
-                for key, mask in events:
-                    if key.data is None:
-                        self.accept_wrapper(key.fileobj)
+                if self.sel.get_map():
+                    events = self.sel.select(timeout=1)
+                    if events:
+                        for key, mask in events:
+                            if key.data is None:
+                                self.accept_wrapper(key.fileobj)
+                            else:
+                                self.service_connection(key, mask)
                     else:
-                        self.service_connection(key, mask)
+                        print("No hay eventos disponibles. Finalizando...")
+                else:
+                    print("Selector cerrado o vacío.")
         except KeyboardInterrupt:
             print("Servidor detenido manualmente.")
         finally:
