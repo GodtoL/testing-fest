@@ -48,8 +48,7 @@ def test_message_broadcast(start_server):
         # Recepción de mensajes por los otros clientes
         received_messages = []
         for client in clients[1:]:
-            # Establecer un timeout para evitar bloqueos
-            client.settimeout(5)  # 5 segundos de timeout
+            client.settimeout(5)
             try:
                 mess = client.recv(1024)
                 received_messages.append(mess)
@@ -57,7 +56,6 @@ def test_message_broadcast(start_server):
                 print(f"Timeout al recibir mensaje en {client}")
                 raise
 
-        # Verificaciones
         assert len(received_messages) == len(clients) - 1, "No se recibieron mensajes en todos los clientes"
         
         # Verificar que todos los mensajes recibidos son iguales
@@ -81,7 +79,7 @@ def test_multiple_clients_connection(start_server):
 def test_abrupt_disconnection(start_server):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect(("127.0.0.1", 55555))
-    client.close()  # Desconexión abrupta
+    client.close() 
 
     new_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     new_client.connect(("127.0.0.1", 55555))
