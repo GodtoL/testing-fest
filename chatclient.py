@@ -1,45 +1,60 @@
+# chatclient.py
 import socket
-import threading
-import sys
+from threading import Thread
 
-nickname = input("Escriba su apodo: ")
-
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(('127.0.0.1', 55555))
-
-def receive():
-    while True:
-        try:
-            message = client.recv(1024).decode('ascii')
-            if message:
-                print(message)
-            else:
-                print("Conexión cerrada por el servidor")
-                client.close()
+class ChatClient:
+    def __init__(self, nickname=None):
+        self.nickname = nickname
+        self.client = None
+        
+    def connect(self, host='127.0.0.1', port=55555):
+        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client.connect((host, port))
+        
+        if not self.nickname:
+            self.nickname = input("Escriba su apodo: ")
+            
+        receiver_thread = Thread(target=self.receive, daemon=True)
+        receiver_thread.start()
+    
+    def receive(self):
+        while True:
+            try:
+                message = self.client.recv(1024).decode('ascii')
+                if message:
+                    print(message)
+                else:
+                    print("Conexión cerrada por el servidor")
+                    self.client.close()
+                    break
+            except Exception as e:
+                print(f"Error al recibir mensaje: {e}")
+                self.client.close()
                 break
-        except:
-            print("Error fatal al recibir mensaje")
-            client.close()
-            break
 
-def write():
-    while True:
+    def write(self, default_message=None):
         try:
-            input_message = input('')
-            if input_message.strip():
-                message = f'{nickname}: {input_message}'
-                client.send(message.encode('ascii'))
-        except EOFError:
-            print("Conexión cerrada por el cliente")
-            client.close()
-            break
-        except:
-            print("Error fatal al enviar mensaje")
-            client.close()
-            break
+            if default_message:
+                message = f'{self.nickname}: {default_message}'
+                self.client.send(message.encode('ascii'))
+                return True
+            else:
+                input_message = input('')
+                if self.verify_message(input_message):
+                    message = f'{self.nickname}: {input_message}'
+                    self.client.send(message.encode('ascii'))
+                    return True
+                else:
+                    print("Mensaje vacío")
+                    return False
+        except Exception as e:
+            print(f"Error al enviar mensaje: {e}")
+            self.client.close()
+            return False
 
-receive_thread = threading.Thread(target=receive, daemon=True)
-receive_thread.start()
-
-write_thread = threading.Thread(target=write)
-write_thread.start()
+    def verify_message(self, message):
+        return bool(message and message.strip())
+        
+    def close(self):
+        if self.client:
+            self.client.close()
